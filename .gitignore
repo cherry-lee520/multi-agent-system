@@ -1,0 +1,17 @@
+# Python 虚拟环境
+.venv/
+.venv-check/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 环境变量和密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 编辑器配置
+.vscode/
