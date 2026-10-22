@@ -1,137 +1,223 @@
 # Multi-Agent System
 
-基于 Python、FastAPI 和 Uvicorn 的多 Agent 协作系统（逐步开发中）。
+基于 Python 和 FastAPI 开发的 Multi-Agent 协作系统。
 
-## 当前阶段：W01 — 服务端健康检查
+项目采用渐进式开发，逐步实现任务接收、任务执行、状态查询、数据持久化以及后续的多 Agent 协作。
 
-**目标：** 在 Ubuntu 服务器上构建可启动、可停止、可通过 SSH 隧道访问、可在新虚拟环境中复现的服务端骨架。
+目前完成 **W02：单 Agent 固定任务执行与查询**。
 
-> 当前状态：以下验收项尚未提供实测结果；完成测试后勾选，不要将预期行为视为已验证结果。
+## 1. 技术栈
 
-### 技术栈
+- Python 3
+- FastAPI：Web API 框架
+- Uvicorn：ASGI 服务器
+- Pydantic：数据模型与输入校验
+- pytest：自动化测试
+- HTTPX：HTTP 测试客户端
 
-- Ubuntu（服务器）
-- Python 3（以 `python3 --version` 实测为准）
-- FastAPI（HTTP API）
-- Uvicorn（ASGI 服务器）
-- Python `venv`（依赖隔离）
-- SSH 本地端口转发（Windows ↔ Ubuntu）
-
-### 项目结构
+## 2. 项目结构
 
 ```text
 multi-agent-system/
-├── server_agent.py       # FastAPI 应用及 /health 接口
-├── run_server.sh         # 使用 .venv 启动服务
-├── requirements.txt      # 当前 Python 环境导出的依赖版本
-├── .gitignore            # 忽略本地环境和缓存
-└── README.md             # 项目说明和验收记录
+├── server_agent.py       # FastAPI 应用入口
+├── task_agent.py         # 任务路由、记录存储与查询
+├── task_executor.py      # 文本统计执行器
+├── run_server.sh         # 服务启动脚本
+├── requirements.txt      # Python 依赖
+├── README.md             # 项目说明
+└── tests/
+    ├── conftest.py       # 测试数据清理
+    └── test_tasks.py     # API 自动化测试
 ```
 
-`.venv/` 和 `.venv-check/` 在本地生成，不应提交到 Git。
+如使用独立的 `task_models.py`，则该文件负责定义和校验请求模型。
 
-## 环境配置
+## 3. 已实现功能
 
-以下命令在 **Ubuntu 服务器的项目目录** 执行：
+### W01：服务端基础功能
+
+- FastAPI 服务部署
+- Uvicorn 启动
+- `/health` 健康检查
+- SSH 隧道访问
+- GitHub 仓库管理
+
+### W02：固定任务执行
+
+- POST 提交任务
+- Pydantic 请求数据校验
+- UUID 生成唯一任务 ID
+- `text_length` 文本字符统计
+- Python 字典存储任务结果
+- GET 根据任务 ID 查询记录
+- 1000 条任务容量限制
+- HTTP 状态码与异常处理
+- pytest 自动化测试
+
+## 4. 安装与启动
+
+克隆仓库后进入项目目录：
 
 ```bash
-cd ~/multi-agent-system
-python3 --version
+git clone <repository-url>
+cd multi-agent-system
+```
+
+创建 Python 虚拟环境：
+
+```bash
 python3 -m venv .venv
+```
+
+安装依赖：
+
+```bash
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m pip check
 ```
 
-首次创建项目、尚无 `requirements.txt` 时：
+启动服务器：
 
 ```bash
-.venv/bin/python -m pip install fastapi uvicorn
-.venv/bin/python -m pip check
-.venv/bin/python -m pip freeze > requirements.txt
-```
-
-> 若实际项目目录是 `~/app`，请将本说明中的 `~/multi-agent-system` 改为 `~/app`，无需为了文档移动现有项目。
-
-## 启动服务
-
-```bash
-cd ~/multi-agent-system
 bash run_server.sh
 ```
 
-预期监听地址：`127.0.0.1:8000`。服务只监听服务器本机，不需要在云安全组开放 8000 端口。
+服务器默认监听：
 
-在**另一 SSH 终端**测试：
-
-```bash
-curl --max-time 5 -i http://127.0.0.1:8000/health
-ss -ltnp 'sport = :8000'
+```text
+127.0.0.1:8000
 ```
 
-预期返回 HTTP `200`，正文类似：
+## 5. API 接口
+
+| HTTP 方法 | 路径 | 功能 |
+|---|---|---|
+| GET | `/health` | 检查服务状态 |
+| POST | `/tasks` | 创建并执行任务 |
+| GET | `/tasks/{task_id}` | 查询任务结果 |
+
+### 5.1 创建任务
+
+请求：
+
+```bash
+curl -i -X POST http://127.0.0.1:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"task_type":"text_length","text":"hello world"}'
+```
+
+请求体：
 
 ```json
-{"status":"ok","agent_id":"server-agent-01","version":"0.1.0"}
+{
+  "task_type": "text_length",
+  "text": "hello world"
+}
 ```
 
-### Windows 本地访问（SSH 隧道）
+成功响应状态码：`201 Created`
 
-在 Windows 终端执行以下单行命令；将连接目标替换为可正常登录的 SSH 目标，必要时保留原有 `-i` 私钥路径或 `-p` SSH 端口参数：
+响应示例：
 
-```powershell
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18000:127.0.0.1:8000 root@<服务器公网IP>
+```json
+{
+  "task_id": "<generated-uuid>",
+  "task_type": "text_length",
+  "status": "succeeded",
+  "result": {
+    "character_count": 11
+  }
+}
 ```
 
-隧道建立后，在 Windows **另一个终端**执行：
+字符数使用 Python `len()` 计算，空格、换行均计入字符数。
 
-```powershell
-curl.exe -i http://127.0.0.1:18000/health
-```
-
-或在浏览器打开 `http://127.0.0.1:18000/health`。
-
-## 停止与环境复现
-
-在运行服务的终端按 `Ctrl+C`。重新运行服务器本地 `curl`，预期连接失败（前提是没有其他服务占用 8000 端口）。
-
-创建干净测试环境，并安装记录的依赖：
+### 5.2 查询任务
 
 ```bash
-cd ~/multi-agent-system
-python3 -m venv .venv-check
-.venv-check/bin/python -m pip install -r requirements.txt
-.venv-check/bin/python -m pip check
-.venv-check/bin/python -m uvicorn server_agent:app --host 127.0.0.1 --port 8000
+curl http://127.0.0.1:8000/tasks/<task_id>
 ```
 
-重新检查服务器的 `/health`，并通过 Windows SSH 隧道复测。验证结束后，按 `Ctrl+C` 停止测试服务；确认 `.venv-check` 不含需要保留的数据，再删除：
+将 `<task_id>` 替换为创建任务时返回的 UUID。
+
+成功返回 `200 OK`，查询不存在的任务返回 `404 Not Found`。
+
+### 5.3 输入校验
+
+当前仅允许任务类型：
+
+```text
+text_length
+```
+
+文本长度范围：
+
+```text
+1～10000 个字符
+```
+
+以下输入返回 `422`：
+
+- 不支持的任务类型
+- 缺少必填字段
+- 空文本
+- 超过 10000 个字符的文本
+- 包含额外字段的请求
+
+当任务存储达到 1000 条时，新任务返回 `503 Service Unavailable`。
+
+## 6. 自动化测试
+
+安装测试依赖后运行：
 
 ```bash
-rm -r .venv-check
+.venv/bin/python -m pytest -v
 ```
 
-## W01 验收清单
+当前已完成的测试包括：
 
-- [ ] `python3 --version` 已记录：`待填写`
-- [ ] `.venv` 建立完成，`pip check` 无冲突
-- [ ] `/health` 返回 HTTP 200，包含 `status`、`agent_id`、`version`
-- [ ] `ss` 确认仅监听 `127.0.0.1:8000`
-- [ ] Windows 经 SSH 隧道收到相同 JSON
-- [ ] `Ctrl+C` 停止后访问失败，重新启动后恢复
-- [ ] `.venv-check` 依据 `requirements.txt` 成功安装并运行
+- POST 创建任务
+- GET 查询任务
+- 不合法输入返回 422
+- 不存在任务返回 404
+- 重复提交生成不同 UUID
+- 任务存储容量边界检查
+- 健康检查接口
 
-**验收日期：** 待填写  
-**测试环境：** Ubuntu 版本待填写；Python 版本待填写  
-**遇到的问题及解决办法：** 待填写
+测试状态：**已通过**。
 
-## 已完成与下一步
+具体测试数量和运行结果以最新 pytest 输出为准。
 
-- 已确认：Ubuntu 云服务器基础部署和 SSH 登录可用。
-- W01 待核验：健康检查、隧道访问、停止/恢复及新环境复现。
-- W02 候选：实现单 Agent 的固定任务提交与执行接口，增加请求校验、状态与错误处理。
+## 7. 当前限制
 
-## 注意事项
+本阶段采用最简化设计：
 
-- 当前服务只是 HTTP 服务骨架，**不具备**模型推理、任务调度或多 Agent 协作能力。
-- `requirements.txt` 固定的是导出的包版本，不等同于跨所有系统完全可复现的锁文件。
-- 请勿向 Git 提交 `.venv/`、密钥、密码或其他敏感配置。
+- 单进程运行
+- 同步执行任务
+- 内存字典存储记录
+- 服务重启后任务记录丢失
+- 不支持多进程共享任务状态
+- 不支持异步任务队列
+- 不执行 Shell 命令
+- 尚未实现真正的多 Agent 协作
+
+## 8. 开发进度
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| W01 | FastAPI 服务与健康检查 | 完成 |
+| W02 | 单 Agent 任务执行与结果查询 | 核心功能与测试完成 |
+| W03 | SQLite 任务持久化 | 待开发 |
+
+## 9. 下一阶段计划
+
+W03：SQLite 持久化。
+
+计划实现：
+
+1. 建立任务数据库。
+2. 将任务结果写入 SQLite。
+3. 支持按 UUID 查询历史任务。
+4. 重启服务器后仍能查询已有任务。
+5. 增加数据库相关自动化测试。
+
+长期目标：构建具有任务分发、Agent 协作、状态管理和结果汇总能力的 Multi-Agent 系统。
