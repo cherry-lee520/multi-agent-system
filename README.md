@@ -187,6 +187,44 @@ text_length
 
 具体测试数量和运行结果以最新 pytest 输出为准。
 
+## HTTP 冒烟测试
+
+项目提供基于 Python 标准库 `urllib.request` 的 HTTP 冒烟测试脚本，用于验证实际运行中的 Uvicorn 服务。
+
+### 运行方法
+
+首先启动服务：
+
+```bash
+bash run_server.sh
+```
+
+在另一个终端执行：
+
+```bash
+.venv/bin/python script/smoke_tasks.py
+```
+
+### 测试范围
+
+| 测试项目 | 预期状态码 |
+|---|---|
+| GET /health | 200 |
+| POST /tasks（合法输入） | 201 |
+| GET /tasks/{task_id} | 200 |
+| GET /tasks/not-exit | 404 |
+| POST /tasks（非法输入） | 422 |
+
+### 自动化测试
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+当前 W02 验收结果：6 项 pytest 测试通过，5 项 HTTP 冒烟测试通过。
+
+**注意：** 当前任务数据保存在进程内存中，服务重启后不会保留。SQLite 持久化将在 W03 实现。
+
 ## 7. 当前限制
 
 本阶段采用最简化设计：
