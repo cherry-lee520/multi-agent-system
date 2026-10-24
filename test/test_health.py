@@ -1,10 +1,8 @@
-from fastapi.testclient import TestClient
-from server_agent import app
-
-client = TestClient(app)
-
-def test_health():
-
-	response = client.get("/health")
-
-	assert response.status_code == 200
+def test_health(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "agent_id": "server-agent-01",
+        "version": "0.1.0",
+    }

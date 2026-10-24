@@ -15,3 +15,6 @@ __pycache__/
 
 # 编辑器配置
 .vscode/
+
+# 本地 SQLite 任务数据
+data/

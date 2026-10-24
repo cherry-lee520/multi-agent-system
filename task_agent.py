@@ -1,5 +1,7 @@
 from uuid import uuid4
-from fastapi import FastAPI, HTTPException, APIRouter
+from datetime import datetime, timezone
+from fastapi import HTTPException, APIRouter
+from database import create_task, get_task as get_task_from_db, count_tasks
 from pydantic import BaseModel,Field,ConfigDict
 from task_executor import execute_text_length
 from typing import Literal
@@ -12,10 +14,9 @@ class TaskRequest(BaseModel):
 
 router = APIRouter()
 
-tasks = {} #保存所有任务
 @router.post("/tasks",status_code=201)
 def check_task(task:TaskRequest):
-	if len(tasks)>999:
+	if count_tasks() >= 1000:
 		raise HTTPException(status_code=503,detail="Task storage is full")
 
 	task_id = str(uuid4())
@@ -26,7 +27,10 @@ def check_task(task:TaskRequest):
 				  "task_type":task.task_type,
 				  "status":"succeeded",
 				  "result":result}
-			tasks[task_id] = record
+			create_task({
+				**record,
+				"created_at": datetime.now(timezone.utc).isoformat(),
+			})
 			return record
 		case _:
 			raise HTTPException(
@@ -34,6 +38,8 @@ def check_task(task:TaskRequest):
 				detail="Unsupported task type")
 @router.get("/tasks/{task_id}")
 def get_task(task_id:str):
-	if task_id not in tasks:
+	record = get_task_from_db(task_id)
+	if record is None:
 		raise HTTPException(status_code=404,detail="Task not found")
-	return tasks[task_id]
+	# created_at 仅用于数据库存储，保持现有 API 响应字段。
+	return {key: record[key] for key in ("task_id", "task_type", "status", "result")}
