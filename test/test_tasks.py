@@ -34,6 +34,7 @@ def test_create_task(client):
     assert data["result"] == {"character_count": 5}
     assert data["status"] == "succeeded"
     stored = get_task(data["task_id"])
+    assert stored is not None
     assert stored["result"] == data["result"]
     assert datetime.fromisoformat(stored["created_at"]).tzinfo == timezone.utc
     get_response = client.get(f"/tasks/{data['task_id']}")

@@ -3,39 +3,41 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, APIRouter
 from database import create_task, get_task as get_task_from_db, count_tasks
 from pydantic import BaseModel,Field,ConfigDict
-from task_executor import execute_text_length
+from dispatcher import dispatch_task
 from typing import Literal
 
 class TaskRequest(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	task_type: Literal["text_length"]
+	task_type: Literal["text_length","word_count"]
 	text:str = Field(min_length=1,max_length=10000)
 
 router = APIRouter()
 
-@router.post("/tasks",status_code=201)
-def check_task(task:TaskRequest):
-	if count_tasks() >= 1000:
-		raise HTTPException(status_code=503,detail="Task storage is full")
+@router.post("/tasks", status_code=201)
+def check_task(task: TaskRequest):
+    if count_tasks() >= 1000:
+        raise HTTPException(
+            status_code=503,
+            detail="Task storage is full",
+        )
 
-	task_id = str(uuid4())
-	match task.task_type:
-		case "text_length":
-			result = execute_text_length(task.text)
-			record = {"task_id":task_id,
-				  "task_type":task.task_type,
-				  "status":"succeeded",
-				  "result":result}
-			create_task({
-				**record,
-				"created_at": datetime.now(timezone.utc).isoformat(),
-			})
-			return record
-		case _:
-			raise HTTPException(
-				status_code=422,
-				detail="Unsupported task type")
+    task_id = str(uuid4())
+    result = dispatch_task(task.task_type, task.text)
+
+    record = {
+        "task_id": task_id,
+        "task_type": task.task_type,
+        "status": "succeeded",
+        "result": result,
+    }
+
+    create_task({
+        **record,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return record
 @router.get("/tasks/{task_id}")
 def get_task(task_id:str):
 	record = get_task_from_db(task_id)

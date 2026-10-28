@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -48,28 +49,54 @@ def run_in_new_process(code, *args):
     return json.loads(completed.stdout)
 
 
-def test_task_survives_process_restart(tmp_path, monkeypatch):
-    # 两个独立进程使用同一数据库，验证结果不依赖 Python 内存。
-    monkeypatch.setenv("TASK_DB_PATH", str(tmp_path / "restart" / "tasks.db"))
+@pytest.mark.parametrize(
+    "task_type, expected",
+    [
+        ("text_length", {"character_count": 11}),
+        ("word_count", {"word_count": 2}),
+    ],
+)
+def test_task_survives_process_restart(
+    tmp_path, monkeypatch, task_type, expected
+):
+    db_path = tmp_path / "restart" / "tasks.db"
+    monkeypatch.setenv("TASK_DB_PATH", str(db_path))
+
+    # 第一个进程：创建任务，写入 SQLite，然后退出。
     created = run_in_new_process('''
 import json
+import sys
+
 from fastapi.testclient import TestClient
 from server_agent import app
+
 with TestClient(app) as client:
-    response = client.post("/tasks", json={"task_type": "text_length", "text": "hello"})
+    response = client.post(
+        "/tasks",
+        json={"task_type": sys.argv[1], "text": "hello world"},
+    )
     assert response.status_code == 201
     print(json.dumps(response.json()))
-''')
+''', task_type)
+
+    assert created["task_type"] == task_type
+    assert created["status"] == "succeeded"
+    assert created["result"] == expected
+
+    # 第二个进程：使用同一数据库，按 UUID 查询任务。
     loaded = run_in_new_process('''
 import json
 import sys
+
 from database import count_tasks
 from fastapi.testclient import TestClient
 from server_agent import app
+
 with TestClient(app) as client:
     response = client.get("/tasks/" + sys.argv[1])
     assert response.status_code == 200
     assert count_tasks() == 1
     print(json.dumps(response.json()))
 ''', created["task_id"])
+
     assert loaded == created
